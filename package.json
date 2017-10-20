@@ -1,0 +1,17 @@
+{
+  "name": "twitter-network-analysis",
+  "version": "1.0.0",
+  "description": "Traverse and search for Twitter communities.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "argparse": "^1.0.9",
+    "dotenv": "^4.0.0",
+    "get-twitter-bearer-token": "^1.0.0",
+    "twitter": "^1.7.1"
+  }
+}
