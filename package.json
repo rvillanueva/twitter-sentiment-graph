@@ -12,6 +12,7 @@
     "argparse": "^1.0.9",
     "dotenv": "^4.0.0",
     "get-twitter-bearer-token": "^1.0.0",
+    "graphlib": "^2.1.1",
     "sentiment": "^4.1.0",
     "stats-lite": "^2.1.0",
     "twitter": "^1.7.1"
