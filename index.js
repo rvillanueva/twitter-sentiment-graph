@@ -26,8 +26,7 @@ parser.addArgument(
 var args = parser.parseArgs();
 
 var graph = new Graph();
-var nodeCount = 0;
-var storedSeedStep = {};
+var steps = 0;
 var traversals = [];
 
 // ANALYSIS-SPECIFIC RANKING FUNCTIONS
@@ -39,8 +38,8 @@ function scoringFunc(item){
 // MAIN PROCESS
 
 addSeedNode(args.input)
-.then(userId => runRecursiveSearch(userId))
-.then(() => console.log(`Done, with ${graph.nodes().length} steps!`))
+.then(screenName => runRecursiveSearch(screenName))
+.then(() => console.log(`Done, with ${steps} steps.`))
 .catch(err => {
   console.error(err);
   throw new Error(err);
@@ -70,23 +69,26 @@ function addSeedNode(searchTerm){
       })
       return getHighestRankedTweet(ranked);
     })
-    .then(tweet => resolve(tweet.user.id))
+    .then(tweet => resolve(tweet.user.screen_name))
     .then(() => resolve())
     .catch(err => reject(err))
   })
 }
 
 
-function runRecursiveSearch(userId){
+function runRecursiveSearch(screenName){
   return new Promise((resolve, reject) => {
-    if(graph.nodes.length > 1 ){
+    if(steps > 10 ){
       return resolve();
     }
-    getTimelineByUserId(userId)
-    .then(timeline => analyzeTweetSentiments(timeline.statuses))
-    .then(tweets => recordAdjacentNodes(userId, tweets))
-    .then(() => selectNextTraversal(userId))
-    .then(user => runRecursiveSearch(user))
+    steps ++;
+
+    getTimelineByScreenName(screenName)
+    .then(tweets => analyzeTweetSentiments(tweets))
+    .then(tweets => addNodeLabel(screenName, tweets))
+    .then(tweets => recordAdjacentNodes(screenName, tweets))
+    .then(() => selectNextTraversal(screenName))
+    .then(screenName => runRecursiveSearch(screenName))
     .then(() => resolve())
     .catch(err => reject(err))
   });
@@ -99,7 +101,7 @@ function runRecursiveSearch(userId){
 // Put tweets into item container.
 function searchTweets(term){
   return new Promise((resolve, reject) => {
-    client.get('search/tweets', { q: term, count: 20 }, (err, data, res) => {
+    client.get('search/tweets', { q: term, count: 50 }, (err, data, res) => {
       if(err){
         return reject(err);
       }
@@ -108,11 +110,11 @@ function searchTweets(term){
   })
 }
 
-function getTimelineByUserId(userId){
+function getTimelineByScreenName(screenName){
   return new Promise((resolve, reject) => {
-    console.log('User is ' + userId);
-    client.get('statuses/user', {
-      user_id: userId,
+    console.log('User is ' + screenName);
+    client.get('statuses/user_timeline', {
+      screen_name: String(screenName),
       include_rts: true,
       exclude_replies: false,
       count: 50
@@ -160,18 +162,31 @@ function getHighestRankedTweet(ranked){
 }
 
 // Search through tweets and create new nodes and edges from mentions
-function recordAdjacentNodes(userId, tweets){
+function recordAdjacentNodes(screenName, tweets){
   tweets.map(tweet => {
-    if(false){
-      if(false){
-        graph.setNode();
-      }
-      graph.setEdge(userId, 'a');
-    }
+    tweet.entities.user_mentions.map(mention => {
+      graph.setEdge(screenName, mention.screen_name, { type: 'mention' });
+    })
   })
   return Promise.resolve();
 }
 
-function selectNextTraversal(userId){
-  graph.getEdges(userId)
+function addNodeLabel(screenName, tweets){
+  var totalScore = 0;
+  tweets.map(tweet => {
+    totalScore += tweet.sentiment.score;
+  })
+  var nodeScore = totalScore/tweets.length;
+  graph.setNode(screenName, {
+    score: nodeScore
+  });
+  console.log(`Added node ${screenName} with score ${nodeScore}.`)
+  return Promise.resolve(tweets);
+}
+
+function selectNextTraversal(screenName){
+  var edges = graph.edges() || [];
+  var nextTraversal = edges[Math.floor(Math.random() * edges.length)].w;
+  console.log('Next traversal is ' + nextTraversal);
+  return Promise.resolve(nextTraversal);
 }
