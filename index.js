@@ -34,21 +34,15 @@ parser.addArgument(
 var args = parser.parseArgs();
 
 var graph = new Graph();
-var steps = 0;
 var maxSteps = args.steps || 15;
 var traversals = [];
 var searched = [];
+var steps = [];
 
 // ANALYSIS-SPECIFIC RANKING FUNCTIONS
 
 function seedScoringFunc(item){
   return item.sentiment.score;
-}
-
-function traversalScoringFunc(edge){
-  var node = graph.node(edge.v);
-  var edge = graph.edge(edge.v, edge.w);
-  return (edge.sentiment + node.sentiment * 5) / Math.pow(node.user.followers, 1/3);
 }
 
 // MAIN PROCESS
@@ -85,12 +79,13 @@ function addSeedNode(screenName){
       return sumTweetSentiments(tweets)
     })
     .then(score => {
-      graph.setNode(screenName, {
+      graph.setNode(user.screen_name, {
         sentiment: score,
         user: user
       });
-      return resolve(nextTraversal);
+      return recordStep(user.screen_name);
     })
+    .then(() => resolve(nextTraversal))
     .catch(err => reject(err))
   })
 }
@@ -99,12 +94,10 @@ function addSeedNode(screenName){
 function runRecursiveSearch(screenName){
   return new Promise((resolve, reject) => {
     var tweets, user;
-    if(steps > maxSteps ){
+    if(steps.length > maxSteps ){
       return resolve();
     }
-    steps ++;
     console.log(`${graph.nodes().length} nodes, ${graph.edges().length} edges.`);
-
     getTimelineByScreenName(screenName)
     .then(tweets => analyzeTweetSentiments(tweets))
     .then(data => {
@@ -114,7 +107,8 @@ function runRecursiveSearch(screenName){
     })
     .then(score => addNodeLabel(user, score, tweets))
     .then(tweets => recordAdjacentNodes(screenName, tweets))
-    .then(() => selectNextTraversal(screenName, traversalScoringFunc))
+    .then(() => recordStep(screenName))
+    .then(() => selectNextTraversal(screenName))
     .then(screenName => runRecursiveSearch(screenName))
     .then(() => resolve())
     .catch(err => {
@@ -124,8 +118,6 @@ function runRecursiveSearch(screenName){
     })
   });
 }
-
-
 // HELPER FUNCTIONS
 
 // Search tweets for a specific keyword. Used to get seed node options.
@@ -202,15 +194,50 @@ function recordAdjacentNodes(screenName, tweets){
         score += existingEdge.score;
       };
       score += tweet.sentiment.score;
-      graph.setEdge(screenName, mention.screen_name, { type: 'mention', sentiment: sentiment, tweet: tweet });
+      graph.setEdge(screenName, mention.screen_name, { type: 'mention', score: score, tweet: tweet });
     })
   })
   return Promise.resolve();
 }
 
+function recordStep(screenName){
+  var user = {
+    id: screenName,
+    label: graph.node(user)
+  }
+  var inEdges = graph.inEdges(screenName).map(edge => {
+    return {
+      source: edge.v,
+      target: edge.w,
+      label: edge.label
+    }
+  })
+  var outEdges = graph.outEdges(screenName).map(edge => {
+    return {
+      source: edge.v,
+      target: edge.w,
+      label: edge.label
+    }
+  })
+  var successors = graph.outEdges(screenName).map(edge => {
+    return {
+      id: edge.w,
+      label: graph.node(edge.w)
+    }
+  })
+  var step = {
+    user: user,
+    inEdges: inEdges,
+    outEdges: outEdges,
+    successors: successors
+  }
+  steps.push(step);
+  return Promise.resolve()
+}
+
 function addNodeLabel(user, score, tweets){
   graph.setNode(user.screen_name, {
-    sentiment: score,
+    score: score,
     user: user
   });
   console.log(`Added node ${user.screen_name} with score ${score}.`)
@@ -226,49 +253,72 @@ function sumTweetSentiments(tweets){
   return Promise.resolve(nodeScore);
 }
 
-function selectNextTraversal(screenName, scoringFunc){
-  var edges = graph.edges();
-  var filtered = edges.filter(edge => {
-    return searched.indexOf(edge.w.toLowerCase()) === -1;
+function selectNextTraversal(screenName){
+  var nodes = graph.nodes();
+  var items = [];
+  nodes = nodes.filter(node => {
+    return searched.indexOf(node.toLowerCase()) === -1;
+  })
+  nodes.map(node => {
+    var total = 0;
+    var edges = graph.outEdges(node);
+    var scores = [];
+    edges.map(edge => {
+      scores.push(graph.edge(edge.v, edge.w).score);
+    })
+    items.push({
+      node: node,
+      mean: stats.mean(scores),
+      stdev: stats.stdev(scores)
+    })
   });
-  var sorted = filtered.sort((a, b) => {
-    return scoringFunc(a) - scoringFunc(b);
+  var sorted = items.sort((a, b) => {
+    return a.mean - b.mean;
   });
-  var nextTraversal = sorted[0].w;
+  var nextTraversal = sorted[0].node;
   console.log('Next traversal is ' + nextTraversal);
-  traversals.push([screenName, nextTraversal]);
   searched.push(nextTraversal.toLowerCase());
   return Promise.resolve(nextTraversal);
 }
 
 function writeOutput(){
+  /*var links = graph.edges().filter(edge => {
+    return graph.node(edge.v) && graph.node(edge.w);
+  }).map(edge => {
+    return {
+      source: edge.v,
+      target: edge.w,
+      value: graph.edge(edge.v, edge.w).score
+    }
+  });
+
+  var nodes = graph.nodes().filter(node => {
+    return graph.node(node) ? true : false;
+  }).map(node => {
+    return {
+      id: node,
+      label: graph.node(node)
+    }
+  });
+*/
   var res = {
-    links: graph.edges().filter(edge => {
-      return graph.node(edge.v) && graph.node(edge.w);
-    }).map(edge => {
-      return {
-        source: edge.v,
-        target: edge.w,
-        value: graph.edge(edge.v, edge.w).sentiment
-      }
-    }),
-    nodes: graph.nodes().filter(node => {
-      return graph.node(node) ? true : false;
-    }).map(node => {
-      return {
-        id: node,
-        label: graph.node(node)
-      }
-    }),
-    traversals: traversals
+    steps: steps
   }
-  fs.mkdir('./public/data', (err, data) => {
-    fs.writeFile('./public/data/graph.js', 'var graph = ' + JSON.stringify(res), 'utf-8', (err, data) => {
-      if(err){
-        console.error(err)
-        return;
-      }
-      console.log('Done!')
+  return new Promise((resolve, reject) => {
+    fs.mkdir('./public/data', (err, data) => {
+      fs.writeFile('./public/data/graph.js', 'var graph = ' + JSON.stringify(res), 'utf-8', (err, data) => {
+        if(err){
+          reject(err)
+          return;
+        }
+        console.log('Done!')
+        resolve();
+      })
     })
   })
 }
+
+process.on('unhandledRejection', (reason, p) => {
+  console.log('Unhandled Rejection at: Promise', p, 'reason:', reason, reason.stack);
+  // application specific logging, throwing an error, or other logic here
+});
