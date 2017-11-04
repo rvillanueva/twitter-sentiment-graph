@@ -9,6 +9,7 @@ var displayed = {
 
 var i = 0;
 
+addSeedNode();
 addNewNodes();
 
 function addNewNodes(){
@@ -22,21 +23,53 @@ function addNewNodes(){
   }, 1000);
 }
 
-function addStep(step){
-  var nodes = [];
-  var links = [];
-  nodes.push(step.user);
-  nodes = nodes.concat(step.successors);
-  displayed.nodes = displayed.nodes.concat(nodes);
+function addSeedNode(){
+  var source = graph.steps[0].user;
+  var target = graph.steps[0].mentioned[0];
+  displayed.nodes.push(source);
+  displayed.nodes.push(target);
+  displayed.links.push({
+    source: source,
+    target: target
+  });
+  i++;
+}
 
-  links = links.concat(step.outEdges);
-  links = links.map(link => {
-    link.source = getDisplayedNode(link.source);
-    link.target = getDisplayedNode(link.target);
-    return link;
+function addStep(step){
+  // Update existing node;
+  if(displayed.nodes.length > 0){
+    displayed.nodes = displayed.nodes.map(node => {
+      if(node.id === step.user.id){
+        node.score = step.user.score;
+      }
+      return node;
+    })
+  }
+
+  // keep only first 10 mentions;
+  step.mentioned = step.mentioned.filter((mention, m) => {
+    return m < 10;
   })
-  console.log(links, step.inEdges)
-  displayed.links = displayed.links.concat(links);
+
+  // Add mentioned nodes if they don't already exist;
+  step.mentioned.map(mention => {
+    var found;
+    displayed.nodes.map(node => {
+      if(node.id === mention.id){
+        found = true;
+      }
+    })
+    if(!found){
+      displayed.nodes.push(mention);
+    }
+  });
+
+  step.mentioned.map(mention => {
+    displayed.links.push({
+      source: getDisplayedNode(step.user.id),
+      target: getDisplayedNode(mention.id)
+    });
+  });
   restart();
 }
 
