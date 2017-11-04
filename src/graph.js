@@ -8,7 +8,7 @@ class TwitterGraph {
     this.graph = new Graph();
     this.steps = [];
     this.searched = [];
-    this.exploreChance = 0.2;
+    this.exploreChance = 0.4;
   }
 
   createSeed(screenName){
@@ -22,7 +22,10 @@ class TwitterGraph {
         sourceUser = sourceTweets[0].user.screen_name;
         return Twitter.getMentions(screenName)
       })
-      .then(targetTweets => getFriendliestTweet(targetTweets))
+      .then(targetTweets => {
+        var friendliest = getFriendliestTweet(targetTweets);
+        return Promise.resolve(friendliest);
+      })
       .then(targetTweet => {
         targetUser = targetTweet.user.screen_name;
         return saveSeedNodes(sourceTweets, targetTweet, this.graph)
@@ -68,10 +71,13 @@ class TwitterGraph {
         score: label.score
       }
     })
+    var label = this.graph.node(screenName);
     var step = {
       user: {
         id: screenName,
-        score: this.graph.node(screenName).score
+        score: label.score,
+        bestTweet: label.bestTweet,
+        profile_image_url: label.user.profile_image_url
       },
       mentioned: mentioned
     }
@@ -97,15 +103,13 @@ class TwitterGraph {
 }
 
 function getFriendliestTweet(tweets){
-  return new Promise((resolve, reject) => {
     var ranked = tweets.map(tweet => {
-      tweet.sentiment = sentiment(tweet.text);
+      tweet.sentiment = sentiment(tweet.text).score;
       return tweet;
     }).sort((a, b) => {
-      return a.sentiment - b.sentiment;
+      return b.sentiment - a.sentiment;
     })
-    resolve(ranked[0]);
-  })
+    return ranked[0];
 }
 
 function saveSeedNodes(sourceTweets, targetTweet, graph){
@@ -115,11 +119,12 @@ function saveSeedNodes(sourceTweets, targetTweet, graph){
   graph.setNode(sourceNode, {
     user: null,
     score: sourceUserSentiment,
+    user: sourceTweets[0].user,
     isSeed: true
   })
   graph.setNode(targetNode, {});
   graph.setEdge(sourceNode, targetNode, {
-    score: sentiment(targetTweet.text).comparative,
+    score: sentiment(targetTweet.text).score,
     tweet: targetTweet
   })
   return Promise.resolve()
@@ -128,7 +133,7 @@ function saveSeedNodes(sourceTweets, targetTweet, graph){
 function getUserSentimentScore(tweets){
   var totalScore = 0;
   tweets.map(tweet => {
-    totalScore += sentiment(tweet.text).comparative;
+    totalScore += sentiment(tweet.text).score;
   })
   return tweets.length > 0 ? totalScore/tweets.length : 0;
 }
@@ -154,15 +159,15 @@ function selectUserToAnalyze(graph, exploreChance, searched){
   })
   .sort((a, b) => {
     if(shouldExplore){
-      if(a.mentionScore && !b.mentionScore){
+      if(!a.mentionScore && b.mentionScore){
         return -1;
-      } else if (!a.mentionScore && b.mentionScore){
+      } else if (a.mentionScore && !b.mentionScore){
         return 1;
       } else {
         return 0;
       }
     } else {
-      return (a.mentionScore || 0) - (b.mentionScore || 0);
+      return (b.mentionScore || 0) - (a.mentionScore || 0);
     }
   })
   if(!sorted.length){
@@ -182,6 +187,8 @@ function updateUserNode(graph, tweets){
   var mentionScore = getUserMentionScore(graph, screenName);
   graph.setNode(screenName, {
     score: score,
+    bestTweet: getFriendliestTweet(tweets),
+    user: tweets[0].user,
     mentionScore: mentionScore
   })
   console.log(`Added user ${screenName} with score ${score} and mention score ${mentionScore}`);
@@ -194,6 +201,8 @@ function recalculatePredecessorNodes(graph, screenName){
     var label = graph.node(edge.v);
     graph.setNode(edge.v, {
       score: label.score,
+      user: label.user,
+      bestTweet: label.bestTweet,
       mentionScore: getUserMentionScore(graph, edge.v)
     })
   })
@@ -218,7 +227,7 @@ function addMentionedNodes(graph, tweets){
   tweets.map(tweet => {
     var mentions = tweet.entities.user_mentions.map(mention => {
       allMentions.push({
-        score: sentiment(tweet.text).comparative,
+        score: sentiment(tweet.text).score,
         mentionedScreenName: mention.screen_name,
         tweet: tweet
       })
@@ -229,10 +238,7 @@ function addMentionedNodes(graph, tweets){
     // sort by score
     return a.score - b.score;
   });
-  var filtered = sorted.filter((mention, m) => {
-    return m < 10 || graph.node(mention.mentionedScreenName);
-  })
-  filtered.map(mention => {
+  sorted.map(mention => {
     if(!graph.node(mention.mentionedScreenName)){
       graph.setNode(mention.mentionedScreenName, {});
     }

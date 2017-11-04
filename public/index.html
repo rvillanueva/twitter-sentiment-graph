@@ -12,7 +12,13 @@
         <!-- Place favicon.ico in the root directory -->
 
         <style>
-
+        html, body {
+          font-family: 'Helvetica Neue', Helvetica, sans-serif;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+          color: rgb(42, 42, 42);
+          font-size: 12px;
+        }
           .links line {
             stroke: #999;
             stroke-opacity: 0.6;
@@ -22,7 +28,24 @@
             stroke: #fff;
             stroke-width: 1.5px;
           }
-
+          #tweet-box {
+            position: fixed;
+            right: 0;
+            height: 100%;
+            top: 0;
+            width: 200px;
+            max-height: 100%;
+            overflow-y: scroll;
+          }
+          .tweet-container {
+            border: 1px solid rgb(224, 224, 224);
+            border-radius: 2px;
+            margin: 8px 4px;
+            padding: 8px 8px;
+          }
+          .tweet-text {
+            margin: 0;
+          }
         </style>
         <script src="https://d3js.org/d3.v4.min.js"></script>
 
@@ -33,7 +56,7 @@
         <![endif]-->
 
         <svg width="960" height="600"></svg>
-
+        <div id="tweet-box"></div>
         <script src="data/graph.js"></script>
         <script src="scripts/app.js"></script>
     </body>

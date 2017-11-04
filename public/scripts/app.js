@@ -1,11 +1,15 @@
 console.log(graph);
 
 var nodeIndex = {};
-
+var master = {
+  links: [],
+  nodes: []
+};
 var displayed = {
   links: [],
   nodes: []
 }
+var messages = [];
 
 var i = 0;
 
@@ -26,60 +30,64 @@ function addNewNodes(){
 function addSeedNode(){
   var source = graph.steps[0].user;
   var target = graph.steps[0].mentioned[0];
-  displayed.nodes.push(source);
-  displayed.nodes.push(target);
-  displayed.links.push({
+  master.nodes.push(source);
+  master.nodes.push(target);
+  master.links.push({
     source: source,
     target: target
   });
+  displayed.nodes.push(source);
+  messages.push({
+    screen_name: source.id,
+    profile_image_url: source.profile_image_url
+  })
   i++;
 }
 
 function addStep(step){
   // Update existing node;
-  if(displayed.nodes.length > 0){
-    displayed.nodes = displayed.nodes.map(node => {
-      if(node.id === step.user.id){
-        node.score = step.user.score;
-      }
-      return node;
-    })
-  }
-
-  // keep only first 10 mentions;
-  step.mentioned = step.mentioned.filter((mention, m) => {
-    return m < 10;
+  master.nodes = master.nodes.map(node => {
+    if(node.id === step.user.id){
+      node.score = step.user.score;
+    }
+    return node;
   })
-
-  // Add mentioned nodes if they don't already exist;
   step.mentioned.map(mention => {
     var found;
-    displayed.nodes.map(node => {
-      if(node.id === mention.id){
-        found = true;
-      }
-    })
-    if(!found){
-      displayed.nodes.push(mention);
+    if(!getMasterNode(mention.id)){
+      master.nodes.push(mention)
     }
   });
 
   step.mentioned.map(mention => {
-    displayed.links.push({
-      source: getDisplayedNode(step.user.id),
-      target: getDisplayedNode(mention.id)
-    });
-  });
+    master.links.push({
+      source: getMasterNode(step.user.id),
+      target: getMasterNode(mention.id)
+    })
+  })
+
+  var newNode = getMasterNode(step.user.id)
+  displayed.nodes.push(newNode);
+  master.links.map(link => {
+    if(link.target === newNode){
+      displayed.links.push(link);
+    }
+  })
+  messages.push({
+    screen_name: step.user.id,
+    text: step.user.bestTweet.text,
+    profile_image_url: step.user.profile_image_url
+  })
   restart();
 }
 
-function getDisplayedNode(id){
-  for(var i = 0; i < displayed.nodes.length; i++){
-    if(displayed.nodes[i].id === id){
-      return displayed.nodes[i];
+function getMasterNode(id){
+  for(var i = 0; i < master.nodes.length; i++){
+    if(master.nodes[i].id === id){
+      return master.nodes[i];
     }
   }
-  throw new Error('No node with id ' + id);
+  return null;
 }
 
 
@@ -90,8 +98,8 @@ var svg = d3.select("svg"),
     color = d3.scaleOrdinal(d3.schemeCategory10);
 
 var simulation = d3.forceSimulation(displayed.nodes)
-    .force("charge", d3.forceManyBody().strength(-10))
-    .force("link", d3.forceLink(displayed.links).distance(25))
+    .force("charge", d3.forceManyBody().strength(-40))
+    .force("link", d3.forceLink(displayed.links).distance(50))
     .force("x", d3.forceX())
     .force("y", d3.forceY())
     .alphaTarget(1)
@@ -105,7 +113,9 @@ function restart() {
   // Apply the general update pattern to the nodes.
   node = node.data(displayed.nodes, function(d) { return d.id;});
   node.exit().remove();
-  node = node.enter().append("circle").attr("fill", function(d) { return color(d.id); }).attr("r", 4).merge(node);
+  node = node.enter()
+    .append("circle").attr("fill", function(d) { return getColor(d);}).attr("r", function(d) { return getRadius(d);}).merge(node);
+
   // Apply the general update pattern to the links.
   link = link.data(displayed.links, function(d) { return d.source.id + "-" + d.target.id; });
   link.exit().remove();
@@ -114,6 +124,7 @@ function restart() {
   simulation.nodes(displayed.nodes);
   simulation.force("link").links(displayed.links);
   simulation.alpha(1).restart();
+  renderTweetBox();
 }
 function ticked() {
   node.attr("cx", function(d) { return d.x; })
@@ -122,4 +133,42 @@ function ticked() {
       .attr("y1", function(d) { return d.source.y; })
       .attr("x2", function(d) { return d.target.x; })
       .attr("y2", function(d) { return d.target.y; });
+}
+
+function getColor(node){
+  if(typeof node.score === 'number'){
+    var normalizedScore = (node.score + 5)/10;
+    var hue = Math.floor(normalizedScore * (356 - 230)) + 230;
+    return `hsl(${hue}, 75%, 50%)`;
+  }
+  return 'rgb(189, 189, 189)';
+}
+
+function getRadius(node){
+  if(typeof node.score === 'number'){
+    return 8;
+  }
+  return 2;
+}
+
+function getLinkStroke(node){
+  return Math.floor(node.score + 5 + 1);
+}
+
+function renderTweetBox(){
+  var container = document.getElementById('tweet-box');
+  container.innerHTML = '';
+  messages.map(message => {
+    var div = document.createElement('div');
+    div.className = 'tweet-container';
+    div.innerHTML = `
+      <strong>${message.screen_name}</strong>
+    `
+    if(message.text){
+      div.innerHTML += `
+      <p class='tweet-text'>${message.text}</p>
+      `
+    }
+    container.insertBefore(div, container.firstChild);
+  })
 }

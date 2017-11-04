@@ -8,6 +8,7 @@ const client = new Twitter({
 
 function getMentions(term){
   return new Promise((resolve, reject) => {
+    console.log('Getting mentions for ' + term);
     client.get('search/tweets', { q: term, count: 50 }, (err, data, res) => {
       if(err){
         return reject(err);
@@ -19,6 +20,7 @@ function getMentions(term){
 
 function getTimelineByScreenName(screenName){
   return new Promise((resolve, reject) => {
+    console.log('Getting timeline for ' + screenName);
     client.get('statuses/user_timeline', {
       screen_name: String(screenName),
       include_rts: true,

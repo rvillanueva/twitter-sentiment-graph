@@ -26,7 +26,7 @@ parser.addArgument(
 var args = parser.parseArgs();
 var graph = new TwitterGraph();
 var steps = [];
-var defaultMaxSteps = 15;
+var defaultMaxSteps = 10;
 
 graph.createSeed(args.input)
 .then(() => graph.search(args.steps || defaultMaxSteps))
@@ -35,14 +35,15 @@ graph.createSeed(args.input)
 .catch(err => {
   console.trace();
   console.error(err);
-
-  graph.write()
-  .then(() => {
-    throw new Error(err);
-  })
-  .catch(err => {
-    throw new Error(err);
-  })
+  if(graph.steps.length > 2){
+    graph.write()
+    .then(() => {
+      throw new Error(err);
+    })
+    .catch(err => {
+      throw new Error(err);
+    })
+  }
 })
 
 
