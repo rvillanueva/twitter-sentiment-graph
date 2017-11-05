@@ -8,7 +8,7 @@ class TwitterGraph {
     this.graph = new Graph();
     this.steps = [];
     this.searched = [];
-    this.exploreChance = 0.4;
+    this.exploreChance = 0.2;
   }
 
   createSeed(screenName){
@@ -65,7 +65,7 @@ class TwitterGraph {
     console.log('adding step for ', screenName)
     var outEdges = this.graph.outEdges(screenName);
     var mentioned = outEdges.map(edge => {
-      var label = this.graph.node(edge.w);
+      var label = this.graph.edge(edge.v, edge.w);
       return {
         id: edge.w,
         score: label.score
@@ -76,7 +76,10 @@ class TwitterGraph {
       user: {
         id: screenName,
         score: label.score,
-        bestTweet: label.bestTweet,
+        bestTweet: {
+          text: label.bestTweet.text,
+          sentiment: label.bestTweet.sentiment
+        },
         profile_image_url: label.user.profile_image_url
       },
       mentioned: mentioned
@@ -92,7 +95,7 @@ class TwitterGraph {
       var meta = getMetadata(this.steps);
       var res = {
         steps: this.steps,
-        minScore: meta.minScore,
+        maxMentionScore: meta.maxMentionScore,
         maxScore: meta.maxScore
       }
       fs.mkdir('./public/data', (err, data) => {
@@ -122,13 +125,18 @@ function saveSeedNodes(sourceTweets, targetTweet, graph){
   var sourceUserSentiment = getUserSentimentScore(sourceTweets);
   var sourceNode = sourceTweets[0].user.screen_name;
   var targetNode = targetTweet.user.screen_name;
+  var bestTweet = getFriendliestTweet(sourceTweets);
   graph.setNode(sourceNode, {
-    user: null,
     score: sourceUserSentiment,
     user: sourceTweets[0].user,
+    bestTweet: {
+      text: bestTweet.text,
+      sentiment: bestTweet.sentiment
+    },
     isSeed: true
   })
   graph.setNode(targetNode, {});
+  targetTweet.sentiment = sentiment(targetTweet.text).score;
   graph.setEdge(sourceNode, targetNode, {
     score: sentiment(targetTweet.text).score,
     tweet: targetTweet
@@ -268,16 +276,18 @@ function getInEdgesScore(graph, screenName){
 
 function getMetadata(steps){
   var res = {
-    minScore: null,
-    maxScore: null
+    maxScore: null,
+    maxMentionScore: null
   }
   steps.map(step => {
-    if(!res.minScore || step.user.score < res.minScore){
-      res.minScore = step.user.score;
+    if(!res.maxScore || Math.abs(step.user.score) > res.maxScore){
+      res.maxScore = Math.abs(step.user.score);
     }
-    if(!res.maxScore || step.user.score > res.maxScore){
-      res.maxScore = step.user.score;
-    }
+    step.mentioned.map(mention => {
+      if(!res.maxMentionScore || Math.abs(mention.score) > res.maxMentionScore){
+        res.maxMentionScore = Math.abs(mention.score);
+      }
+    })
   })
   return res;
 }

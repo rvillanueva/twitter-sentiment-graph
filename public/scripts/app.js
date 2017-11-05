@@ -36,7 +36,8 @@ function addSeedNode(){
   master.nodes.push(target);
   master.links.push({
     source: source,
-    target: target
+    target: target,
+    score: graph.steps[0].mentioned[0].score
   });
   displayed.nodes.push(source);
   messages.push({
@@ -67,7 +68,8 @@ function addStep(step){
   step.mentioned.map(mention => {
     master.links.push({
       source: getMasterNode(step.user.id),
-      target: getMasterNode(mention.id)
+      target: getMasterNode(mention.id),
+      score: mention.score
     })
   })
 
@@ -75,6 +77,7 @@ function addStep(step){
   displayed.nodes.push(newNode);
   master.links.map(link => {
     if(link.target === newNode){
+      console.log(link)
       displayed.links.push(link);
     }
   })
@@ -117,6 +120,10 @@ var g = svg.append("g").attr("transform", "translate(" + width / 2 + "," + heigh
 restart();
 
 function restart() {
+  displayed.nodes = displayed.nodes.map(node => {
+    node.radius = getRadiusScale(node);
+    return node;
+  })
   // Apply the general update pattern to the nodes.
   node = node.data(displayed.nodes, function(d) { return d.id;});
   node.exit().remove();
@@ -131,35 +138,36 @@ function restart() {
     .append("ellipse")          // shape it as an ellipse
       .attr("cx", 0)         // position the x-centre
       .attr("cy", 0)         // position the y-centre
-      .attr("rx", 20)         // set the x radius
-      .attr("ry", 20);         // set the y radius
+      .attr("rx", 24)         // set the x radius
+      .attr("ry", 24);         // set the y radius
   holder // give the clipPath an ID
     .append("ellipse")          // shape it as an ellipse
       .attr("cx", 0)         // position the x-centre
       .attr("cy", 0)         // position the y-centre
-      .attr("rx", 20)         // set the x radius
-      .attr("ry", 20)
+      .attr("rx", 24)         // set the x radius
+      .attr("ry", 24)
       .attr("stroke", function(d) {return getColor(d)})
       .attr("stroke-width", 4)
       .attr("opacity", function(d){ return getOpacity(d, 0, 1)})
   holder.append("svg:image")
         .attr("clip-path", "url(#ellipse-clip)") // clip the rectangle
         .attr("xlink:href",  function(d) { return d.profile_image_url;})
-        .attr("height", 40)
-        .attr("width", 40)
-        .attr("x", -20)
-        .attr("y", -20)
+        .attr("height", 48)
+        .attr("width", 48)
+        .attr("x", -24)
+        .attr("y", -24)
   holder // give the clipPath an ID
     .append("ellipse")          // shape it as an ellipse
       .attr("cx", 0)         // position the x-centre
       .attr("cy", 0)         // position the y-centre
-      .attr("rx", 20)         // set the x radius
-      .attr("ry", 20)
+      .attr("rx", 24)         // set the x radius
+      .attr("ry", 24)
       .attr("fill", function(d){ return getColor(d)})
       .attr("opacity", function(d){ return getOpacity(d, 0, 0.5)})
 
 
   node = holder.merge(node);
+
   // Apply the general update pattern to the links.
   link = link.data(displayed.links, function(d) { return d.source.id + "-" + d.target.id; });
   link.exit().remove();
@@ -171,7 +179,7 @@ function restart() {
   renderTweetBox();
 }
 function ticked() {
-  node.attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; })
+  node.attr("transform", function(d) { return `translate(${d.x},${d.y}) scale(${d.radius})`; })
       //.attr("x", function(d) { return d.x - 20; })
       //.attr("y", function(d) { return d.y - 20; })
   link.attr("x1", function(d) { return d.source.x; })
@@ -214,8 +222,31 @@ function getLinkStroke(node){
   return Math.floor(node.score + 5 + 1);
 }
 
+function getRadiusScale(node){
+  var minScale = 0.6;
+  var mentionScoreTotal = 0;
+  var mentionCount = 0;
+  var mentionScore = 0;
+  displayed.links.map(link => {
+    if((link.source.id === node.id || link.target.id === node.id) && typeof link.score === 'number'){
+      mentionScoreTotal += link.score;
+      mentionCount ++;
+    }
+  })
+  if(mentionCount > 1){
+    mentionScore = mentionScoreTotal/mentionCount;
+  }
+  var scale = minScale + Math.min(normalizeMentionScore(mentionScore), 1.3);
+  return scale;
+}
+
 function normalizeScore(score){
-  var normalized = score / Math.max(Math.abs(graph.maxScore), Math.abs(graph.minScore));
+  var normalized = score / graph.maxScore;
+  return Math.max(Math.min(normalized, 1), 0);
+}
+
+function normalizeMentionScore(score){
+  var normalized = score / graph.maxMentionScore;
   return Math.max(Math.min(normalized, 1), 0);
 }
 
