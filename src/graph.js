@@ -89,8 +89,14 @@ class TwitterGraph {
   write(){
     return new Promise((resolve, reject) => {
       console.log('Writing js file with ' + this.steps.length + 'steps...');
+      var meta = getMetadata(this.steps);
+      var res = {
+        steps: this.steps,
+        minScore: meta.minScore,
+        maxScore: meta.maxScore
+      }
       fs.mkdir('./public/data', (err, data) => {
-        fs.writeFile('./public/data/graph.js', 'var graph = ' + JSON.stringify({steps: this.steps}), 'utf-8', (err, data) => {
+        fs.writeFile('./public/data/graph.js', 'var graph = ' + JSON.stringify(res), 'utf-8', (err, data) => {
           if (err) {
             reject(err)
             return;
@@ -258,6 +264,22 @@ function getInEdgesScore(graph, screenName){
     edgeScoreTotal += label.score;
   })
   return edgeScoreTotal/inEdges.length;
+}
+
+function getMetadata(steps){
+  var res = {
+    minScore: null,
+    maxScore: null
+  }
+  steps.map(step => {
+    if(!res.minScore || step.user.score < res.minScore){
+      res.minScore = step.user.score;
+    }
+    if(!res.maxScore || step.user.score > res.maxScore){
+      res.maxScore = step.user.score;
+    }
+  })
+  return res;
 }
 
 module.exports = TwitterGraph;
