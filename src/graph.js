@@ -8,7 +8,7 @@ class TwitterGraph {
     this.graph = new Graph();
     this.steps = [];
     this.searched = [];
-    this.exploreChance = 0.2;
+    this.exploreChance = 0.33;
   }
 
   createSeed(screenName){
@@ -53,7 +53,7 @@ class TwitterGraph {
         return updateUserNode(this.graph, tweets);
       })
       .then(() => addMentionedNodes(this.graph, tweets))
-      .then(() => recalculatePredecessorNodes(this.graph, screenName))
+      .then(() => recalculateAdjacentNodes(this.graph, screenName))
       .then(() => this.addStep(screenName))
       .then(() => this.search(remainingSteps))
       .then(() => resolve())
@@ -95,7 +95,7 @@ class TwitterGraph {
       var meta = getMetadata(this.steps);
       var res = {
         steps: this.steps,
-        maxMentionScore: meta.maxMentionScore,
+        maxEdgesScore: meta.maxEdgesScore,
         maxScore: meta.maxScore
       }
       fs.mkdir('./public/data', (err, data) => {
@@ -162,35 +162,21 @@ function selectUserToAnalyze(graph, exploreChance, searched){
     return {
       id: node,
       score: label.score,
-      mentionScore: label.mentionScore
+      edgesScore: label.edgesScore,
+      followers: label.user ? label.user.followers_count : 0
     };
   })
   .sort((a, b) => {
-    if(shouldExplore){
-      return getInEdgesScore(graph, a.id) - getInEdgesScore(graph, b.id);
-    }
-    return 0;
-  })
-  .sort((a, b) => {
-    if(shouldExplore){
-      if(!a.mentionScore && b.mentionScore){
-        return -1;
-      } else if (a.mentionScore && !b.mentionScore){
-        return 1;
-      } else {
-        return 0;
-      }
-    } else {
-      return (b.mentionScore || 0) - (a.mentionScore || 0);
-    }
+    return (b.edgesScore * b.followers > 1000 ? 0.75 : 1) - (a.edgesScore * a.followers > 1000 ? 0.75 : 1);
   })
   if(!sorted.length){
     return Promise.reject(new Error('No valid nodes to analyze.'));
   }
   console.log(`Analyzing ${sorted[0].id}`);
+  var selected = shouldExplore ? sorted[Math.floor(Math.random() * sorted.length)] : sorted[0];
 
   return Promise.resolve({
-    id: sorted[0].id,
+    id: selected.id,
     stepType: shouldExplore ? 'explore' : 'exploit'
   });
 }
@@ -198,42 +184,38 @@ function selectUserToAnalyze(graph, exploreChance, searched){
 function updateUserNode(graph, tweets){
   var screenName = tweets[0].user.screen_name;
   var score = getUserSentimentScore(tweets);
-  var mentionScore = getUserMentionScore(graph, screenName);
+  var edgesScore = getEdgesScore(graph, screenName);
   graph.setNode(screenName, {
     score: score,
     bestTweet: getFriendliestTweet(tweets),
     user: tweets[0].user,
-    mentionScore: mentionScore
+    edgesScore: edgesScore
   })
-  console.log(`Added user ${screenName} with score ${score} and mention score ${mentionScore}`);
+  console.log(`Added user ${screenName} with score ${score} and edges score ${edgesScore}`);
   return Promise.resolve();
 }
 
-function recalculatePredecessorNodes(graph, screenName){
+function recalculateAdjacentNodes(graph, screenName){
   var inEdges = graph.inEdges(screenName);
+  var outEdges = graph.outEdges(screenName);
   inEdges.map(edge => {
     var label = graph.node(edge.v);
     graph.setNode(edge.v, {
       score: label.score,
       user: label.user,
       bestTweet: label.bestTweet,
-      mentionScore: getUserMentionScore(graph, edge.v)
+      edgesScore: getEdgesScore(graph, edge.v)
     })
   })
-}
-
-function getUserMentionScore(graph, screenName){
-  var outEdges = graph.outEdges(screenName);
-  var totalMentionScore = 0;
-  var count = 0;
   outEdges.map(edge => {
     var label = graph.node(edge.w);
-    if(typeof label.score === 'number'){
-      totalMentionScore += label.score;
-      count ++;
-    }
+    graph.setNode(edge.w, {
+      score: label.score,
+      user: label.user,
+      bestTweet: label.bestTweet,
+      edgesScore: getEdgesScore(graph, edge.v)
+    })
   })
-  return count > 0 ? totalMentionScore/count : 0;
 }
 
 function addMentionedNodes(graph, tweets){
@@ -264,28 +246,29 @@ function addMentionedNodes(graph, tweets){
   return Promise.resolve()
 }
 
-function getInEdgesScore(graph, screenName){
-  var inEdges = graph.inEdges(screenName);
+function getEdgesScore(graph, screenName){
+  var edges = graph.inEdges(screenName).concat(graph.outEdges(screenName));
   var edgeScoreTotal = 0;
-  inEdges.map(edge => {
+  edges.map(edge => {
     var label = graph.edge(edge.v, edge.w);
     edgeScoreTotal += label.score;
   })
-  return edgeScoreTotal/inEdges.length;
+  edgeScoreTotal += graph.node(screenName).score;
+  return edgeScoreTotal/(edges.length + 1);
 }
 
 function getMetadata(steps){
   var res = {
     maxScore: null,
-    maxMentionScore: null
+    maxEdgesScore: null
   }
   steps.map(step => {
     if(!res.maxScore || Math.abs(step.user.score) > res.maxScore){
       res.maxScore = Math.abs(step.user.score);
     }
     step.mentioned.map(mention => {
-      if(!res.maxMentionScore || Math.abs(mention.score) > res.maxMentionScore){
-        res.maxMentionScore = Math.abs(mention.score);
+      if(!res.maxEdgesScore || Math.abs(mention.score) > res.maxEdgesScore){
+        res.maxEdgesScore = Math.abs(mention.score);
       }
     })
   })

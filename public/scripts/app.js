@@ -108,8 +108,8 @@ var svg = d3.select("svg"),
     color = d3.scaleOrdinal(d3.schemeCategory10);
 
 var simulation = d3.forceSimulation(displayed.nodes)
-    .force("charge", d3.forceManyBody().strength(-200))
-    .force("link", d3.forceLink(displayed.links).distance(100))
+    .force("charge", d3.forceManyBody().strength(-500))
+    .force("link", d3.forceLink(displayed.links).distance(90))
     .force("x", d3.forceX())
     .force("y", d3.forceY())
     .alphaTarget(1)
@@ -211,19 +211,12 @@ function getOpacity(node, min, max){
   return 0;
 }
 
-function getRadius(node){
-  if(typeof node.score === 'number'){
-    return 8;
-  }
-  return 2;
-}
-
 function getLinkStroke(node){
   return Math.floor(node.score + 5 + 1);
 }
 
 function getRadiusScale(node){
-  var minScale = 0.6;
+  var minScale = 0.8;
   var mentionScoreTotal = 0;
   var mentionCount = 0;
   var mentionScore = 0;
@@ -236,7 +229,7 @@ function getRadiusScale(node){
   if(mentionCount > 1){
     mentionScore = mentionScoreTotal/mentionCount;
   }
-  var scale = minScale + Math.min(normalizeMentionScore(mentionScore), 1.3);
+  var scale = minScale + Math.min(normalizeMentionScore(mentionScore) * 2, 2);
   return scale;
 }
 
@@ -246,7 +239,7 @@ function normalizeScore(score){
 }
 
 function normalizeMentionScore(score){
-  var normalized = score / graph.maxMentionScore;
+  var normalized = score / graph.maxEdgesScore;
   return Math.max(Math.min(normalized, 1), 0);
 }
 
