@@ -47,8 +47,10 @@ function addSeedNode(){
   messages.push({
     user: {
       screen_name: source.id,
-      profile_image_url: source.profile_image_url
-    }
+      profile_image_url: source.profile_image_url,
+      score: graph.steps[0].user.score
+    },
+    text: graph.steps[0].user.bestTweet.text
   })
   i++;
 }
@@ -88,9 +90,10 @@ function addStep(step){
   messages.push({
     user: {
       screen_name: step.user.id,
-      profile_image_url: step.user.profile_image_url
+      profile_image_url: step.user.profile_image_url,
+      score: step.user.score
     },
-    text: step.user.bestTweet.text,
+    text: step.user.bestTweet.text
   })
   restart();
 }
@@ -176,7 +179,6 @@ function restart() {
       .attr("fill", function(d){ return getColor(d)})
       .attr("opacity", function(d){ return getOpacity(d, 0, 0.5)})
 
-
   node = holder.merge(node);
 
   // Apply the general update pattern to the links.
@@ -220,15 +222,34 @@ function getColor(node){
     var normalizedScore = normalizeEdgesScore(node.edgesScore);
     var hue;
     if(node.edgesScore > 0){
-      hue = 240
+      hue = 111
     } else {
       hue = 0;
     }
-    var color = `hsl(${hue}, 75%, 35%)`;
+    var color = `hsl(${hue}, 50%, 35%)`;
     return color;
   }
   return 'rgb(189, 189, 189)';
 }
+
+
+
+function getScoreColor(node){
+  if(typeof node.score === 'number'){
+    var normalizedScore = normalizeScore(node.score);
+    var hue;
+    if(node.score > 0){
+      hue = 111
+    } else {
+      hue = 0;
+    }
+    var lightness = 100 - Math.abs(normalizedScore - 0.5) * 2 * 35;
+    var color = `hsl(${hue}, 50%, ${lightness}%)`;
+    return color;
+  }
+  return 'rgb(189, 189, 189)';
+}
+
 
 function getOpacity(node, min, max){
   if(typeof node.score === 'number'){
@@ -262,6 +283,13 @@ function getEdgesScore(node){
   return scoreTotal/count;
 }
 
+function getText(node){
+  if(node.bestTweet){
+    return `${node.id}: ${node.bestTweet.text}`;
+  }
+  return ''
+}
+
 function normalizeScore(score){
   var normalized = score / graph.maxScore;
   return Math.max(Math.min(normalized, 1), 0);
@@ -278,14 +306,15 @@ function renderTweetBox(){
   messages.map(message => {
     var div = document.createElement('div');
     div.className = 'tweet-container';
+    div.style.border = `2px solid ${getScoreColor(message.user)}`;
     div.innerHTML = `
-      <strong>${message.user.screen_name}</strong>
+      <div class="col-left">
+        <img src="${message.user.profile_image_url}" class="profile-image">
+      </div><div class="col-right">
+        <strong>${message.user.screen_name}</strong>
+        <p class='tweet-text'>${message.text}</p>
+      </div>
     `
-    if(message.text){
-      div.innerHTML += `
-      <p class='tweet-text'>${message.text}</p>
-      `
-    }
     container.insertBefore(div, container.firstChild);
   })
 }
